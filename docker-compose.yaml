@@ -1,0 +1,116 @@
+# Strings like "<image_name>:<version>" should be replaced with appropriate 
+# docker image name and version number from the local Docker Registry
+# Modify ports given under 'expose' section (if you are using ports different from the defaults
+
+version: '2'
+        
+services:
+
+    zookeeper:
+      hostname: ${LOCAL_HOST}
+      image: ${ZOOKEEPER_IMAGE}
+      environment:
+        - u=${USER}:${USER}
+        - JVM_OPTS=-Xmx12g -Xms12g -XX:MaxPermSize=2048m
+        - ZOO_MY_ID=${ZOO_MY_ID}
+        - ZOOKEEPER_CLIENT_PORT=${ZOOK_CL_PORT}
+      # Change this value based on zk instances in the cluster #
+        #- ZOO_SERVERS=${ZOO_SERVER_1}
+      # Change this property to true if admin server in required #
+        #- ZOO_ADMINSERVER_ENABLED=false
+      # Remove this property if zk runs in standalone mode #
+        - ZOO_STANDALONE_ENABLED=false
+      volumes:
+        - ${VOLUMES_PATH}/zk/data:/var/lib/zookeeper/data
+        - ${VOLUMES_PATH}/zk/logs:/var/lib/zookeeper/log
+      #network_mode: "host"
+      ports:
+        - ${ZOOK_CL_PORT}:${ZOOK_CL_PORT}
+        - ${ZOOK_SR_PORT}:${ZOOK_SR_PORT}
+        - ${ZOOK_EL_PORT}:${ZOOK_EL_PORT}
+        - ${ZOOK_ADM_PORT}:8080
+
+    kafka:
+      hostname: ${LOCAL_HOST}
+      image: ${KAFKA_IMAGE}
+      command: /bin/bash -c "/start.sh"
+      depends_on:
+        - zookeeper
+      volumes:
+        - ${VOLUMES_PATH}/kf/logs:/logs
+        - ${VOLUMES_PATH}/kf/data:/data
+        - /etc/timezone:/etc/timezone:ro
+        - /etc/localtime:/etc/localtime:ro
+      environment:
+        - u=${USER}:${USER}
+        - KAFKA_ADVERTISED_HOST_NAME=${LOCAL_HOST}
+        - KAFKA_DELETE_TOPIC_ENABLE=true
+        - KAFKA_BROKER_ID=${KAFKA_BROKER_ID}
+        - KAFKA_PORT=${KAFKA_PORT}
+        - JMX_PORT=7213
+        - ZOOKEEPER_CONNECTION_STRING=${ZOO_URL}
+        - ZOOKEEPER_SESSION_TIMEOUT_MS=30000
+        - ZOOKEEPER_CONNECTION_TIMEOUT_MS=30000
+        - KAFKA_DEFAULT_PARTITIONS=1
+        - KAFKA_DEFAULT_REPLICATION_FACTOR=1
+        - JVM_OPTS=-Xmx12g -Xms12g -XX:MaxPermSize=2048m
+      network_mode: "host"
+      ports:
+        - 0.0.0.0:${KAFKA_PORT}:${KAFKA_PORT}
+
+    postgres:
+      # *-----------------------------*
+      # To connect to the DB: 
+      #   docker-compose exec postgres bash -c 'psql -U $POSTGRES_USER $POSTGRES_DB'
+      # *-----------------------------*
+      image: postgres:11
+      container_name: postgres
+      network_mode: "host"
+      ports:
+        - 5432:5432
+      environment:
+       - POSTGRES_USER=postgres
+       - POSTGRES_PASSWORD=postgres
+      volumes:
+       - ./volumes/data/postgres:/docker-entrypoint-initdb.d/
+
+    #pgadmin:
+     # image: dpage/pgadmin4
+     # container_name: pgadmin
+     # depends_on:
+     #   - postgres
+     # ports:
+     #  - 18080:80
+     # environment:
+     #  - PGADMIN_DEFAULT_EMAIL=postgres@example.com
+     #  - PGADMIN_DEFAULT_PASSWORD=postgres
+     #  - PGADMIN_LIST_PORT=18080
+
+    kafka-connect-02:
+      image: ${KAFKA_CONNECTOR_J_IMAGE}
+      container_name: kafka-connect-02
+      network_mode: "host" 
+      depends_on:
+        - zookeeper
+        - kafka
+      ports:
+        - 8087:8087
+      environment:
+        CONNECT_BOOTSTRAP_SERVERS: "10.174.128.122:9095"
+        CONNECT_REST_PORT: 8087
+        CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-02"
+        CONNECT_GROUP_ID: "default"
+        CONNECT_CONFIG_STORAGE_TOPIC: "default.config"
+        CONNECT_OFFSET_STORAGE_TOPIC: "default.offsets"
+        CONNECT_STATUS_STORAGE_TOPIC: "default.status"
+        CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+        CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+        CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+        CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+        CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+        CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+        CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+        CONNECT_PLUGIN_PATH: /usr/share/java,/etc/kafka-connect/jars
+      volumes:
+        - ./vol42/kafka-connect/jars:/etc/kafka-connect/jars
+
