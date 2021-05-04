@@ -23,6 +23,7 @@ curl -X POST http://10.129.174.174:8082/connectors -H "Content-Type: application
                 "poll.interval.ms": 3600000
                 }
         }'
+
 **Sink connector Configurations:**
 
 curl -X POST http://10.129.174.174:8082/connectors -H "Content-Type: application/json" -d '{
